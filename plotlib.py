@@ -1,4 +1,5 @@
 import pandas as pd
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 pd.set_option('display.float_format', lambda x: '%.3f' % x)
@@ -14,7 +15,7 @@ from bokeh.io import hplot, output_file, show
 from bokeh.plotting  import figure
 
 from IPython.core.display  import display, HTML
-display(HTML("<style>.container { width:100% !important; }</style>"))
+#display(HTML("<style>.container { width:100% !important; }</style>"))
 from bokeh.io  import output_notebook
 plt.style.use('ggplot')
 output_notebook()
@@ -67,7 +68,7 @@ def plot_scheduling_and_Total_Delay(spark_metrics_dir,fig_count,title,showPlot):
             p.line(x_values,TotalDelay,legend="Total Delay", line_width=2)
             p.line(x_values,processing_time,legend="Processing Time", line_width=2,line_color='green') # in seconds
             #throughput = (TotalDelay - scheduling_delay)/metrics['NumberRecords']
-        bplt.show(p)
+            bplt.show(p)
             
         return (x_values,processing_time)
 
@@ -184,13 +185,70 @@ def plot_decays(spark_metrics_dir_1,title_1,spark_metrics_dir_2,title_2,fig_coun
 def rec_per_sec(proces_time,throughin):
         
     processing_records_per_second_per_batch = []
-    s = len(processing_time[1])
+    s = len(proces_time[1])
     for i in xrange(s):
-        temp = throughin_111[1][i]/processing_time[1][i]
+        temp = throughin[1][i]/proces_time[1][i]
         processing_records_per_second_per_batch.append(temp)
             
-    return (processing_time[0],processing_records_per_second_per_batch)
+    return (proces_time[0],processing_records_per_second_per_batch)
+
+
+def find_total_consumer_throughin(spark_metrics,ttc):
+    
+    metrics = pd.read_csv(directory + spark_metrics ,skipinitialspace=True)
+    Nrecords = metrics['NumberRecords'].sum()
+    Nrecords = Nrecords/ttc
+
+    return Nrecords  # number of records per second
 
 
 
+def find_total_producer_throughput(adir,producers, ttc,showPlot,text):
 
+    from operator import add
+
+    rates = pd.read_csv(directory + adir + producers[0])
+    size = len(rates['Num_Messages'].tolist())
+    total_x = [0]*size
+    total_y = [0]*size
+
+    for producer in producers:
+        rates = pd.read_csv(directory + adir +  producer)
+        x_values = rates['Num_Messages'].tolist()
+        total_x = map(add,total_x,x_values)
+        y_values = rates['KB/sec'].tolist()
+        total_y = map(add,total_y,y_values)
+
+    # add plotting of producer
+    if showPlot==True:
+        f = plt.figure()
+        #plt.xlim(0,30000)
+        plt.plot(total_x,total_y)
+        plt.ylabel('KB/s')
+        plt.xlabel('Msg number')
+        plt.title("Total Producer  throughput")
+        #text = 'Figure ' + str(fig_count) + ' : ' + txt
+        f.text(.20, .02, text, ha='center')
+
+    #avg production rate:
+    avg_production_rate = len(total_x)*len(producers)/ttc  # number_of_messages_per_producer*Nproducers/ttc
+    
+    return (avg_production_rate,total_x,total_y)
+
+
+#adir = '/home/georgeha/repos/midas_exps/streaming/k-means/spark/1-node/8-1-16-1r/producers'
+
+def find_producers_file(directory):
+        
+    dataset = []
+    producers_dirs = os.listdir(directory)
+    for producer in producers_dirs:
+        try:
+            files = os.listdir(directory + '/' + producer)
+            for el in files:
+                if 'stdout-' in el:
+                    dataset.append(producer+ '/' + el)
+        except:
+            pass
+
+    return dataset
