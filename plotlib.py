@@ -1,4 +1,7 @@
 import pandas as pd
+import time
+import dateutil
+import dateutil.parser
 import os
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,10 +14,10 @@ from bokeh.models  import Label, Title
 import itertools  
 from bokeh.layouts  import gridplot,row,column
 
-from bokeh.io import hplot, output_file, show
+#from bokeh.io import hplot, output_file, show
 from bokeh.plotting  import figure
 
-from IPython.core.display  import display, HTML
+#from IPython.core.display  import display, HTML
 #display(HTML("<style>.container { width:100% !important; }</style>"))
 from bokeh.io  import output_notebook
 plt.style.use('ggplot')
@@ -252,3 +255,52 @@ def find_producers_file(directory):
             pass
 
     return dataset
+
+
+
+#producers = '8-1-2-new-settings/producers/'
+#adir = '/home/georgeha/repos/midas_exps/streaming/k-means/spark/1-node/8-1-2-new-settings/producers/'
+#dataset =  pltme.find_producers_file(adir)
+
+def producer_throughtput_per_mini_batch(adir,producers):
+        
+    from operator  import add
+        
+    first_pass = True
+    for producer in producers:
+        producer_data =  pd.read_csv(adir + producer)
+        timestamps = producer_data['TimeStamp']
+        timestamps_list = timestamps.tolist()
+        sent_messages_count = 0
+        message_list = []
+        start_time  = time.mktime(dateutil.parser.parse(timestamps_list[0]).timetuple()) 
+                
+        for atime in timestamps_list:
+            cur_time = time.mktime(dateutil.parser.parse(atime).timetuple()) 
+            if abs(start_time - cur_time) > 60: 
+                message_list.append(sent_messages_count)
+                start_time = cur_time
+                sent_messages_count = 0
+            else:
+                sent_messages_count+=1
+                        
+        ## I only create this list the first time, becasue I need to know the size of the list
+        if first_pass:
+            all_messages_list = [0]*len(message_list)
+            first_pass=False
+                            
+        while len(all_messages_list) < len(message_list):
+            all_messages_list.append(0)
+                            
+        while len(message_list) < len(all_messages_list):
+            message_list.append(0)
+                            
+        all_messages_list = map(add,all_messages_list,message_list)
+                                    
+    mb_per_second = []
+    for record in all_messages_list:
+        mb = (record*8*5000*3/1024**2)/60   # (record*DoublePrecisionFloat_bytes*Total_points*dimensions_of_points/convertion_to_mbs)/window_size)
+        mb_per_second.append(mb)
+                            
+    return (all_messages_list,mb_per_second)
+                                            
